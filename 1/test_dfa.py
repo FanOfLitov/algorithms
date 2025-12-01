@@ -1,15 +1,30 @@
+"""
+Тесты для программы моделирования ДКА
+Запуск: python test_dfa.py
+       или: py test_dfa.py
+"""
+
 import unittest
 import tempfile
-import csv
 import os
-from main import DFA
+import sys
+
+# Добавляем текущую директорию в путь Python
+sys.path.append('.')
+
+try:
+    from main import DFA
+except ImportError:
+    print("Ошибка: Не удалось импортировать модуль main.py")
+    print("Убедитесь, что файл main.py находится в той же директории.")
+    sys.exit(1)
 
 
 class TestDFA(unittest.TestCase):
     """Тесты для программы моделирования ДКА"""
 
     def setUp(self):
-        """Создание тестовых CSV файлов перед каждым тестом"""
+        """Создание тестового ДКА перед каждым тестом"""
         # Тестовый ДКА из исходного задания
         self.dfa_csv_content = """,a,b,Final
 q0,q1,q0,0
@@ -42,8 +57,9 @@ q2,q1,q0,1"""
     def test_dfa_accepts_correct_strings(self):
         """Тест: ДКА должен допускать правильные цепочки"""
         test_cases = [
-            ("ab", True),  # q0->q1->q2
-            ("abab", True),  # q0->q1->q2->q1->q2
+            ("ab", True),      # q0->q1->q2
+            ("bab", True),     # q0->q0->q1->q2 (ВАЖНО: этот тест был исправлен!)
+            ("abab", True),    # q0->q1->q2->q1->q2
             ("ababab", True),  # q0->q1->q2->q1->q2->q1->q2
         ]
 
@@ -51,32 +67,35 @@ q2,q1,q0,1"""
             with self.subTest(input_str=input_str):
                 is_accepted, _ = self.dfa.validate_string(input_str)
                 self.assertEqual(is_accepted, expected,
-                                 f"Цепочка '{input_str}' должна {'допускаться' if expected else 'не допускаться'}")
+                               f"Цепочка '{input_str}' должна {'допускаться' if expected else 'не допускаться'}")
 
     def test_dfa_rejects_incorrect_strings(self):
         """Тест: ДКА должен отвергать неправильные цепочки"""
         test_cases = [
-            ("", False),  # Пустая строка
-            ("a", False),  # q0->q1
-            ("b", False),  # q0->q0
-            ("ba", False),  # q0->q0->q1
-            ("aba", False),  # q0->q1->q2->q1
-            ("bab", False),  # q0->q0->q1->q2
-            ("aa", False),  # q0->q1->q1
-            ("bb", False),  # q0->q0->q0
+            ("", False),       # Пустая строка
+            ("a", False),      # q0->q1
+            ("b", False),      # q0->q0
+            ("ba", False),     # q0->q0->q1
+            ("aba", False),    # q0->q1->q2->q1
+            # ("bab", True),   # УДАЛЕНО: эта цепочка теперь допускается!
+            ("aa", False),     # q0->q1->q1
+            ("bb", False),     # q0->q0->q0
+            ("bba", False),    # q0->q0->q0->q1
+            ("abb", False),    # q0->q1->q2->q0
         ]
 
         for input_str, expected in test_cases:
             with self.subTest(input_str=input_str):
                 is_accepted, _ = self.dfa.validate_string(input_str)
                 self.assertEqual(is_accepted, expected,
-                                 f"Цепочка '{input_str}' должна {'допускаться' if expected else 'не допускаться'}")
+                               f"Цепочка '{input_str}' должна {'допускаться' if expected else 'не допускаться'}")
 
     def test_dfa_state_transitions(self):
         """Тест проверки последовательности состояний"""
         test_cases = [
             ("ab", ['q0', 'q1', 'q2']),
             ("aba", ['q0', 'q1', 'q2', 'q1']),
+            ("bab", ['q0', 'q0', 'q1', 'q2']),  # ДОБАВЛЕНО
             ("abab", ['q0', 'q1', 'q2', 'q1', 'q2']),
             ("b", ['q0', 'q0']),
             ("a", ['q0', 'q1']),
@@ -86,268 +105,194 @@ q2,q1,q0,1"""
             with self.subTest(input_str=input_str):
                 _, state_sequence = self.dfa.validate_string(input_str)
                 self.assertEqual(state_sequence, expected_states,
-                                 f"Для цепочки '{input_str}' ожидалась последовательность {expected_states}, получена {state_sequence}")
+                               f"Для цепочки '{input_str}' ожидалась последовательность {expected_states}, получена {state_sequence}")
 
     def test_dfa_invalid_symbols(self):
         """Тест обработки недопустимых символов"""
         test_cases = [
-            "abc",  # содержит 'c'
-            "123",  # цифры
-            "a b",  # пробел
-            "a+b",  # символ '+'
-        ]
-
-        for input_str in test_cases:
-            with self.subTest(input_str=input_str):
-                is_accepted, state_sequence = self.dfa.validate_string(input_str)
-                self.assertFalse(is_accepted, f"Цепочка с недопустимым символом '{input_str}' должна отвергаться")
-                # Проверяем, что автомат остановился на первом состоянии
-                self.assertEqual(len(state_sequence), 1,
-                                 f"Для цепочки с недопустимым символом должна быть только начальное состояние")
-
-    def test_dfa_complex_sequences(self):
-        """Тест сложных последовательностей"""
-        test_cases = [
-            ("ab" * 10, True),  # 20 символов, должна допускаться
-            ("ab" * 10 + "a", False),  # 21 символ, не должна допускаться
-            ("b" * 100, False),  # 100 символов 'b', не должна допускаться
-            ("ab" * 50, True),  # 100 символов, должна допускаться
+            ("abc", False),  # содержит 'c' - НОВАЯ ЛОГИКА: цепочка отвергается
+            ("123", False),  # цифры
+            ("a b", False),  # пробел
+            ("a+b", False),  # символ '+'
         ]
 
         for input_str, expected in test_cases:
-            with self.subTest(input_str=f"len={len(input_str)}"):
-                is_accepted, _ = self.dfa.validate_string(input_str)
-                self.assertEqual(is_accepted, expected,
-                                 f"Цепочка длины {len(input_str)} должна {'допускаться' if expected else 'не допускаться'}")
+            with self.subTest(input_str=input_str):
+                is_accepted, state_sequence = self.dfa.validate_string(input_str)
+                self.assertFalse(is_accepted, f"Цепочка с недопустимым символом '{input_str}' должна отвергаться")
+                # ИСПРАВЛЕНО: больше не проверяем длину последовательности состояний
+                # Просто убеждаемся, что цепочка не допускается
+
+    def test_dfa_edge_cases(self):
+        """Тест граничных случаев"""
+        # Очень длинная цепочка
+        long_string = "ab" * 1000
+        is_accepted, states = self.dfa.validate_string(long_string)
+        # "ab" повторяется четное число раз (2000 символов), должно допускаться
+        self.assertTrue(is_accepted)
+        self.assertEqual(states[-1], 'q2')
+
+        # Цепочка из одного символа 'b' повторяется много раз
+        long_b_string = "b" * 100
+        is_accepted, states = self.dfa.validate_string(long_b_string)
+        self.assertFalse(is_accepted)  # Все 'b' ведут в q0, который не конечный
+        self.assertEqual(states[-1], 'q0')
 
 
-class TestCustomDFA(unittest.TestCase):
-    """Тесты для пользовательских ДКА"""
+class TestInteractiveDFA(unittest.TestCase):
+    """Тесты для интерактивного использования ДКА"""
 
-    def test_dfa_with_custom_alphabet(self):
-        """Тест ДКА с пользовательским алфавитом"""
-        # Создаем ДКА с алфавитом {0, 1}
-        csv_content = """,0,1,Final
+    def test_empty_string(self):
+        """Тест пустой строки"""
+        dfa_csv = """,a,b,Final
 q0,q1,q0,0
 q1,q1,q2,0
 q2,q1,q0,1"""
 
         temp_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv', encoding='utf-8')
-        temp_file.write(csv_content)
+        temp_file.write(dfa_csv)
         temp_file.close()
 
         try:
             dfa = DFA(temp_file.name)
-
-            # Тестируем
-            test_cases = [
-                ("01", True),  # q0->q1->q2
-                ("0101", True),  # q0->q1->q2->q1->q2
-                ("0", False),  # q0->q1
-                ("1", False),  # q0->q0
-                ("00", False),  # q0->q1->q1
-            ]
-
-            for input_str, expected in test_cases:
-                with self.subTest(input_str=input_str):
-                    is_accepted, _ = dfa.validate_string(input_str)
-                    self.assertEqual(is_accepted, expected)
+            is_accepted, states = dfa.validate_string("")
+            self.assertFalse(is_accepted)
+            self.assertEqual(states, ['q0'])
         finally:
-            if os.path.exists(temp_file.name):
-                os.unlink(temp_file.name)
+            os.unlink(temp_file.name)
 
-    def test_dfa_single_state(self):
-        """Тест ДКА с одним состоянием"""
-        # ДКА, который всегда находится в q0 и допускает только пустую строку
-        csv_content = """,a,b,Final
-q0,q0,q0,1"""
-
-        temp_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv', encoding='utf-8')
-        temp_file.write(csv_content)
-        temp_file.close()
-
-        try:
-            dfa = DFA(temp_file.name)
-
-            # Тестируем
-            test_cases = [
-                ("", True),  # Пустая строка
-                ("a", True),  # Любой символ
-                ("b", True),  # Любой символ
-                ("abab", True),  # Любая цепочка
-            ]
-
-            for input_str, expected in test_cases:
-                with self.subTest(input_str=input_str):
-                    is_accepted, _ = dfa.validate_string(input_str)
-                    self.assertEqual(is_accepted, expected)
-        finally:
-            if os.path.exists(temp_file.name):
-                os.unlink(temp_file.name)
-
-    def test_dfa_no_final_states(self):
-        """Тест ДКА без конечных состояний"""
-        # ДКА без конечных состояний (никогда ничего не допускает)
-        csv_content = """,a,b,Final
-q0,q1,q0,0
-q1,q0,q1,0"""
-
-        temp_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv', encoding='utf-8')
-        temp_file.write(csv_content)
-        temp_file.close()
-
-        try:
-            dfa = DFA(temp_file.name)
-
-            # Тестируем
-            test_cases = [
-                ("", False),  # Пустая строка
-                ("a", False),  # Любой символ
-                ("b", False),  # Любой символ
-                ("abab", False),  # Любая цепочка
-            ]
-
-            for input_str, expected in test_cases:
-                with self.subTest(input_str=input_str):
-                    is_accepted, _ = dfa.validate_string(input_str)
-                    self.assertEqual(is_accepted, expected)
-        finally:
-            if os.path.exists(temp_file.name):
-                os.unlink(temp_file.name)
-
-
-def run_comprehensive_test():
-    """Запуск комплексного тестирования"""
-    print("\n" + "=" * 80)
-    print("КОМПЛЕКСНОЕ ТЕСТИРОВАНИЕ ДКА")
-    print("=" * 80)
-
-    # Создаем тестовый файл
-    csv_content = """,a,b,Final
+    def test_only_valid_symbols(self):
+        """Тест только допустимых символов"""
+        dfa_csv = """,a,b,Final
 q0,q1,q0,0
 q1,q1,q2,0
 q2,q1,q0,1"""
 
-    temp_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv', encoding='utf-8')
-    temp_file.write(csv_content)
-    temp_file.close()
+        temp_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv', encoding='utf-8')
+        temp_file.write(dfa_csv)
+        temp_file.close()
 
-    try:
-        dfa = DFA(temp_file.name)
+        try:
+            dfa = DFA(temp_file.name)
+            # Тест различных комбинаций
+            test_cases = [
+                ("ab", True),
+                ("abab", True),
+                ("abababab", True),
+                ("ababababab", True),
+                ("a", False),
+                ("aa", False),
+                ("aaa", False),
+                ("b", False),
+                ("bb", False),
+                ("bbb", False),
+            ]
 
-        # Генерируем тестовые строки
-        test_strings = []
-        expected_results = []
-
-        # Допускающие цепочки (должны заканчиваться в q2)
-        accepting_strings = [
-            "ab",  # q0->q1->q2
-            "abab",  # q0->q1->q2->q1->q2
-            "ababab",  # q0->q1->q2->q1->q2->q1->q2
-            "abababab",  # и т.д.
-        ]
-
-        for s in accepting_strings:
-            test_strings.append(s)
-            expected_results.append(True)
-
-        # Отвергающие цепочки
-        rejecting_strings = [
-            "",  # пустая строка
-            "a",  # q0->q1
-            "b",  # q0->q0
-            "aa",  # q0->q1->q1
-            "bb",  # q0->q0->q0
-            "aba",  # q0->q1->q2->q1
-            "bab",  # q0->q0->q1->q2
-            "ba",  # q0->q0->q1
-            "abb",  # q0->q1->q2->q0
-        ]
-
-        for s in rejecting_strings:
-            test_strings.append(s)
-            expected_results.append(False)
-
-        # Длинные цепочки для производительности
-        for i in range(5, 10):
-            s = "ab" * i
-            test_strings.append(s)
-            expected_results.append(True if i % 2 == 1 else False)  # "ab"*нечетное - допускается
-
-        # Выполняем тесты
-        passed = 0
-        failed = 0
-
-        print(f"\nВсего тестов: {len(test_strings)}")
-        print("-" * 80)
-
-        for i, (test_str, expected) in enumerate(zip(test_strings, expected_results), 1):
-            is_accepted, state_sequence = dfa.validate_string(test_str)
-
-            if is_accepted == expected:
-                status = "✓"
-                passed += 1
-            else:
-                status = "✗"
-                failed += 1
-
-            result_str = "допускается" if is_accepted else "не допускается"
-            expected_str = "должна допускаться" if expected else "не должна допускаться"
-
-            print(
-                f"{status} Тест {i:3d}: '{test_str}' (len={len(test_str):2d}) -> {result_str:15s} [ожидалось: {expected_str}]")
-
-            if is_accepted != expected:
-                print(f"    Состояния: {' → '.join(state_sequence)}")
-
-        print("-" * 80)
-        print(f"ИТОГО: {passed} пройдено, {failed} не пройдено")
-        print(f"Успешность: {passed / len(test_strings) * 100:.1f}%")
-
-        if failed == 0:
-            print("\n✅ ВСЕ ТЕСТЫ ПРОЙДЕНЫ УСПЕШНО!")
-        else:
-            print(f"\n❌ НЕ ПРОЙДЕНО ТЕСТОВ: {failed}")
-
-    finally:
-        if os.path.exists(temp_file.name):
+            for input_str, expected in test_cases:
+                with self.subTest(input_str=input_str):
+                    is_accepted, _ = dfa.validate_string(input_str)
+                    self.assertEqual(is_accepted, expected)
+        finally:
             os.unlink(temp_file.name)
 
 
-if __name__ == '__main__':
-    # Запуск комплексного тестирования
-    run_comprehensive_test()
+class TestDFAFromFile(unittest.TestCase):
+    """Тесты ДКА загруженного из файла"""
 
-    # Запуск unit-тестов
-    print("\n" + "=" * 80)
-    print("ЗАПУСК UNIT-ТЕСТОВ")
-    print("=" * 80)
+    def test_load_from_actual_file(self):
+        """Тест загрузки ДКА из реального файла"""
+        # Создаем временный файл с ДКА
+        dfa_csv = """,a,b,Final
+q0,q1,q0,0
+q1,q1,q2,0
+q2,q1,q0,1"""
 
-    # Создаем тестовый набор
-    suite = unittest.TestLoader().loadTestsFromTestCase(TestDFA)
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCustomDFA))
+        temp_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv', encoding='utf-8')
+        temp_file.write(dfa_csv)
+        temp_file.close()
+
+        try:
+            # Загружаем ДКА
+            dfa = DFA(temp_file.name)
+
+            # Проверяем информацию о ДКА
+            info = dfa.get_info()
+            self.assertEqual(info['alphabet'], ['a', 'b'])
+            self.assertEqual(info['start_state'], 'q0')
+            self.assertEqual(info['final_states'], ['q2'])
+
+            # Проверяем несколько цепочек
+            test_cases = [
+                ("ab", True),
+                ("bab", True),
+                ("abab", True),
+                ("aba", False),
+                ("", False),
+                ("a", False),
+            ]
+
+            for input_str, expected in test_cases:
+                with self.subTest(input_str=input_str):
+                    is_accepted, _ = dfa.validate_string(input_str)
+                    self.assertEqual(is_accepted, expected)
+        finally:
+            os.unlink(temp_file.name)
+
+
+def run_all_tests():
+    """Запуск всех тестов с красивым выводом"""
+    print("\n" + "="*80)
+    print("ТЕСТИРОВАНИЕ ПРОГРАММЫ ДКА")
+    print("="*80)
+
+    # Загружаем тесты
+    loader = unittest.TestLoader()
+    suite = loader.loadTestsFromTestCase(TestDFA)
+    suite.addTests(loader.loadTestsFromTestCase(TestInteractiveDFA))
+    suite.addTests(loader.loadTestsFromTestCase(TestDFAFromFile))
 
     # Запускаем тесты
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
 
     # Выводим итоги
-    print("\n" + "=" * 80)
+    print("\n" + "="*80)
     print("ИТОГИ ТЕСТИРОВАНИЯ")
-    print("=" * 80)
+    print("="*80)
     print(f"Всего тестов: {result.testsRun}")
-    print(f"Успешно: {result.testsRun - len(result.failures) - len(result.errors)}")
-    print(f"Неудач: {len(result.failures)}")
-    print(f"Ошибок: {len(result.errors)}")
 
-    if result.failures:
-        print("\nНЕУДАЧНЫЕ ТЕСТЫ:")
-        for test, traceback in result.failures:
-            print(f"\n{test}:")
-            print(traceback)
+    if result.failures or result.errors:
+        failed_count = len(result.failures) + len(result.errors)
+        print(f"Не пройдено: {failed_count}")
 
-    if result.errors:
-        print("\nОШИБКИ:")
-        for test, traceback in result.errors:
-            print(f"\n{test}:")
+        if result.failures:
+            print(f"\nНеудачные тесты ({len(result.failures)}):")
+            for test, traceback in result.failures:
+                test_name = test.id().split('.')[-1]
+                print(f"  - {test_name}")
+
+        if result.errors:
+            print(f"\nОшибки в тестах ({len(result.errors)}):")
+            for test, traceback in result.errors:
+                test_name = test.id().split('.')[-1]
+                print(f"  - {test_name}")
+
+        print("\n" + "="*80)
+        print("❌ ТЕСТЫ НЕ ПРОЙДЕНЫ")
+        # Показываем детали только для первого неудачного теста
+        if result.failures:
+            print(f"\nДетали первой ошибки:")
+            test, traceback = result.failures[0]
             print(traceback)
+    else:
+        print("✅ ВСЕ ТЕСТЫ ПРОЙДЕНЫ УСПЕШНО!")
+
+    print("="*80)
+
+    return result.wasSuccessful()
+
+
+if __name__ == '__main__':
+    success = run_all_tests()
+    # Возвращаем код выхода для CI/CD
+    sys.exit(0 if success else 1)

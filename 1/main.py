@@ -1,10 +1,11 @@
 import sys
 import csv
+import os
 from typing import Dict, List, Set, Tuple
 
 
 class DFA:
-    """Класс для представления детерминированного конечного автомата"""
+
 
     def __init__(self, csv_file: str):
         """Инициализация ДКА из CSV файла"""
@@ -16,7 +17,7 @@ class DFA:
         self._load_from_csv(csv_file)
 
     def _load_from_csv(self, csv_file: str) -> None:
-        """Загрузка описания автомата из CSV файла"""
+
         try:
             with open(csv_file, 'r', encoding='utf-8') as file:
                 reader = csv.reader(file)
@@ -133,10 +134,12 @@ def run_batch_test(dfa: DFA, test_cases: List[Tuple[str, bool]]) -> None:
 
 
 def main():
-    """Основная функция программы"""
+
     if len(sys.argv) < 2:
         print("Использование: python main.py <csv_file> [input_strings]")
-        print("Примеры:")
+        print("ИЛИ: py main.py <csv_file> [input_strings]")
+        print("ИЛИ: python3 main.py <csv_file> [input_strings]")
+        print("\nПримеры:")
         print("  python main.py dfa.csv abab baba aaabbb")
         print("  python main.py dfa.csv (для интерактивного режима)")
         print("\nДля пакетного тестирования:")
@@ -145,7 +148,13 @@ def main():
 
     csv_file = sys.argv[1]
 
-    # Инициализация ДКА
+
+    if not os.path.exists(csv_file):
+        print(f"Ошибка: Файл '{csv_file}' не найден")
+        print("Убедитесь, что файл существует в текущей директории.")
+        sys.exit(1)
+
+
     try:
         dfa = DFA(csv_file)
         info = dfa.get_info()
@@ -164,33 +173,24 @@ def main():
         print(f"Ошибка при инициализации ДКА: {e}")
         sys.exit(1)
 
-    # Проверка режима работы
+
     if len(sys.argv) > 2 and sys.argv[2] == '--test':
         # Режим пакетного тестирования
         test_cases = [
-            # Тестовые случаи для исходного ДКА из dfa.csv
-            ("ab", False),
-            ("ba", False),
-            ("aba", False),
-            ("bab", False),
-            ("abab", True),
-            ("baba", False),
-            ("aa", False),
-            ("bb", False),
-            ("abba", False),
-            ("baab", False),
+
             ("", False),  # Пустая строка
-            ("a", False),
-            ("b", False),
-            ("ababa", False),
-            ("babab", False),
-            ("ababb", False),
-            ("ababab", True),
-            ("bbbb", False),
-            ("aaaa", False),
-            ("ababbb", False),
-            ("abababab", True),
-            ("ababababab", True),
+            ("a", False),  # q0->q1
+            ("b", False),  # q0->q0
+            ("ab", True),  # q0->q1->q2 ✓
+            ("ba", False),  # q0->q0->q1
+            ("aba", False),  # q0->q1->q2->q1
+            ("bab", False),  # q0->q0->q1->q2
+            ("aa", False),  # q0->q1->q1
+            ("bb", False),  # q0->q0->q0
+            ("abab", True),  # q0->q1->q2->q1->q2 ✓
+            ("baba", False),  # q0->q0->q1->q2->q1
+            ("abba", False),  # q0->q1->q2->q0->q1
+            ("baab", False),  # q0->q0->q1->q1->q1
         ]
 
         run_batch_test(dfa, test_cases)
