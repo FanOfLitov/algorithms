@@ -4,7 +4,7 @@ import csv
 
 def main():
     if len(sys.argv) < 2:
-        print("Использование: python main.py <csv_file> [input_strings]")
+        print("python main.py <csv_file> [input_strings]")
         sys.exit(1)
 
     csv_file = sys.argv[1]
