@@ -196,7 +196,7 @@ def main():
         run_batch_test(dfa, test_cases)
 
     elif len(sys.argv) > 2:
-        # Режим обработки переданных цепочек
+
         input_strings = sys.argv[2:]
         print("\nПРОВЕРКА ЦЕПОЧЕК:")
         print("-" * 60)
