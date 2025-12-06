@@ -6,23 +6,13 @@ from main import NFA, read_nfa_from_csv
 
 class NFAGraphVisualizer:
     def __init__(self, nfa):
-        """
-        Инициализация визуализатора НКА
 
-        Параметры:
-        - nfa: объект NFA для визуализации
-        """
         self.nfa = nfa
         self.dot = graphviz.Digraph(format='png')
         self.dot.attr(rankdir='LR')  # Ориентация слева направо
 
     def draw_nfa(self, highlight_path=None):
-        """
-        Рисует НКА
 
-        Параметры:
-        - highlight_path: список состояний для выделения (опционально)
-        """
         # Настройка стилей
         self.dot.attr('node', shape='circle')
 
