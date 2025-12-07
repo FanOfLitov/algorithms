@@ -15,8 +15,8 @@ sys.path.append('.')
 try:
     from main import DFA
 except ImportError:
-    print("Ошибка: Не удалось импортировать модуль main.py")
-    print("Убедитесь, что файл main.py находится в той же директории.")
+    print("Ошибка: Не удалось импортировать модуль xml_lexer.py")
+    print("Убедитесь, что файл xml_lexer.py находится в той же директории.")
     sys.exit(1)
 
 

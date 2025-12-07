@@ -1,0 +1,6 @@
+ply>=3.11
+rich>=13.0.0
+matplotlib>=3.7.0
+networkx>=3.0
+pytest>=7.0.0
+coverage>=7.0.0

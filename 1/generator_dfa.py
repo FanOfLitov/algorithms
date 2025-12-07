@@ -120,7 +120,7 @@ def main():
             return
 
         print(f"\nФайл '{filename}' создан успешно.")
-        print("Используйте его с программой: python main.py <имя_файла.csv>")
+        print("Используйте его с программой: python xml_lexer.py <имя_файла.csv>")
 
     except Exception as e:
         print(f"❌ Ошибка: {e}")

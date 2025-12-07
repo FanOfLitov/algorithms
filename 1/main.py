@@ -136,14 +136,14 @@ def run_batch_test(dfa: DFA, test_cases: List[Tuple[str, bool]]) -> None:
 def main():
 
     if len(sys.argv) < 2:
-        print("Использование: python main.py <csv_file> [input_strings]")
-        print("ИЛИ: py main.py <csv_file> [input_strings]")
-        print("ИЛИ: python3 main.py <csv_file> [input_strings]")
+        print("Использование: python xml_lexer.py <csv_file> [input_strings]")
+        print("ИЛИ: py xml_lexer.py <csv_file> [input_strings]")
+        print("ИЛИ: python3 xml_lexer.py <csv_file> [input_strings]")
         print("\nПримеры:")
-        print("  python main.py dfa.csv abab baba aaabbb")
-        print("  python main.py dfa.csv (для интерактивного режима)")
+        print("  python xml_lexer.py dfa.csv abab baba aaabbb")
+        print("  python xml_lexer.py dfa.csv (для интерактивного режима)")
         print("\nДля пакетного тестирования:")
-        print("  python main.py dfa.csv --test")
+        print("  python xml_lexer.py dfa.csv --test")
         sys.exit(1)
 
     csv_file = sys.argv[1]
