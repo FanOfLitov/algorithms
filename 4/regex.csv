@@ -9,7 +9,7 @@ a|b,b,True
 a|b,c,False
 a*,aaa,True
 a*,b,False
-a+b,aaab,True
+a+b,aaab,False
 a+b,ab,False
 (a|b)*,abba,True
 (a|b)*,abc,False

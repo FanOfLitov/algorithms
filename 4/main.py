@@ -92,7 +92,7 @@ class DFA:
 
         for symbol in input_string:
             if symbol not in self.alphabet:
-                raise ValueError(f"Символ '{symbol}' не найден в алфавите")
+                return False  # Символ не в алфавите - строка отвергается
 
             if current_state in self.transitions and symbol in self.transitions[current_state]:
                 current_state = self.transitions[current_state][symbol]
@@ -110,7 +110,7 @@ class DFA:
 
         for symbol in input_string:
             if symbol not in self.alphabet:
-                raise ValueError(f"Символ '{symbol}' не найден в алфавите")
+                return False, path  # Символ не в алфавите - строка отвергается
 
             if current_state in self.transitions and symbol in self.transitions[current_state]:
                 current_state = self.transitions[current_state][symbol]
@@ -297,7 +297,22 @@ class RegexInterpreter:
 
         return stack.pop()
 
-    def nfa_to_dfa(self, nfa: NFA) -> DFA:
+    def extract_alphabet_from_regex(self, regex: str) -> Set[str]:
+        """Извлечение алфавита из регулярного выражения"""
+        alphabet = set()
+        i = 0
+        while i < len(regex):
+            if regex[i] == '\\':  # Экранированный символ
+                if i + 1 < len(regex):
+                    alphabet.add(regex[i + 1])
+                    i += 2
+                continue
+            elif regex[i] not in self.operators:
+                alphabet.add(regex[i])
+            i += 1
+        return alphabet
+
+    def nfa_to_dfa(self, nfa: NFA, regex: str = "") -> DFA:
         """Преобразование НКА в ДКА (алгоритм подмножеств)"""
         # Шаг 1: Инициализация
         dfa_states = []
@@ -311,17 +326,12 @@ class RegexInterpreter:
 
         accept_states = set()
 
-        # Шаг 2: Определение алфавита
-        alphabet = set()
-        for state_set in dfa_states:
-            for state in state_set:
-                for symbol in state.transitions:
-                    if symbol:  # Игнорируем пустые символы
-                        alphabet.add(symbol)
+        # Шаг 2: Определение алфавита из регулярного выражения
+        alphabet = self.extract_alphabet_from_regex(regex)
 
-        # Если алфавит пустой, добавляем хотя бы один символ для корректной работы
+        # Если алфавит пустой (например, для ε), добавляем заглушку
         if not alphabet:
-            alphabet.add('a')  # Заглушка
+            alphabet.add('a')
 
         # Шаг 3: Построение таблицы переходов ДКА
         while queue:
@@ -332,7 +342,7 @@ class RegexInterpreter:
             if any(state.is_final for state in current_set):
                 accept_states.add(current_id)
 
-            # Обрабатываем переходы по каждому символу
+            # Обрабатываем переходы по каждому символу алфавита
             for symbol in alphabet:
                 next_states = set()
 
@@ -353,13 +363,25 @@ class RegexInterpreter:
                         dfa_transitions[current_id] = {}
                     dfa_transitions[current_id][symbol] = state_map[next_set]
                 else:
-                    # Нет перехода по символу - можно добавить переход в ловушку,
-                    # но для простоты оставляем без перехода
-                    pass
+                    # Нет перехода по символу - добавляем переход в ловушку (отрицательное состояние)
+                    trap_state = -1
+                    if trap_state not in dfa_transitions:
+                        dfa_transitions[trap_state] = {}
+                    if current_id not in dfa_transitions:
+                        dfa_transitions[current_id] = {}
+                    dfa_transitions[current_id][symbol] = trap_state
 
         # Шаг 4: Создание объекта ДКА
+        # Добавляем состояние-ловушку, если оно используется
+        all_states = set(range(len(dfa_states)))
+        if -1 in dfa_transitions:
+            all_states.add(-1)
+            # Добавляем переходы из ловушки в себя по всем символам
+            for symbol in alphabet:
+                dfa_transitions[-1][symbol] = -1
+
         dfa = DFA(
-            states=set(range(len(dfa_states))),
+            states=all_states,
             alphabet=alphabet,
             transitions=dfa_transitions,
             start_state=0,
@@ -372,7 +394,7 @@ class RegexInterpreter:
         """Полный конвейер: регулярное выражение -> ДКА"""
         postfix = self.to_postfix(regex)
         nfa = self.build_nfa_from_postfix(postfix)
-        return self.nfa_to_dfa(nfa)
+        return self.nfa_to_dfa(nfa, regex)
 
 
 class KMP:
@@ -430,39 +452,6 @@ class KMP:
 
         return result
 
-    @staticmethod
-    def search_with_dfa(text: str, pattern: str) -> List[int]:
-        """Поиск с использованием ДКА, построенного из pattern"""
-        # Создаем интерпретатор и строим ДКА для pattern
-        interpreter = RegexInterpreter()
-
-        # Экранируем специальные символы в pattern для использования как литерала
-        escaped_pattern = ''.join(f'\\{c}' if c in interpreter.operators else c for c in pattern)
-        dfa = interpreter.regex_to_dfa(escaped_pattern)
-
-        result = []
-
-        # Для каждой позиции в тексте проверяем, принимает ли ДКА суффикс
-        for i in range(len(text)):
-            current_state = dfa.start_state
-            j = i
-
-            while j < len(text):
-                symbol = text[j]
-                if symbol in dfa.alphabet and current_state in dfa.transitions:
-                    if symbol in dfa.transitions[current_state]:
-                        current_state = dfa.transitions[current_state][symbol]
-                        if current_state in dfa.accept_states:
-                            result.append(i)
-                            break
-                    else:
-                        break
-                else:
-                    break
-                j += 1
-
-        return result
-
 
 class RegexTester:
     """Класс для тестирования регулярных выражений"""
@@ -481,7 +470,11 @@ class RegexTester:
             # Используем встроенный модуль re для сравнения
             python_matches = []
             try:
-                for match in re.finditer(regex, test_string):
+                # Экранируем специальные символы для Python re
+                python_regex = regex
+                # Заменяем наш оператор конкатенации (если есть)
+                python_regex = python_regex.replace('.', '')
+                for match in re.finditer(python_regex, test_string):
                     python_matches.append(match.start())
             except re.error:
                 # Если регулярное выражение некорректно для Python re
@@ -489,25 +482,7 @@ class RegexTester:
 
             # Используем наш интерпретатор
             interpreter = RegexInterpreter()
-
-            try:
-                dfa = interpreter.regex_to_dfa(regex)
-            except Exception as e:
-                # Если не удалось построить ДКА, пробуем НКА
-                postfix = interpreter.to_postfix(regex)
-                nfa = interpreter.build_nfa_from_postfix(postfix)
-
-                if use_dfa:
-                    dfa = interpreter.nfa_to_dfa(nfa)
-                else:
-                    # Используем НКА
-                    our_matches = []
-                    for i in range(len(test_string)):
-                        for j in range(i + 1, len(test_string) + 1):
-                            if nfa.process_input(test_string[i:j]):
-                                our_matches.append(i)
-                                break
-                    return False, our_matches
+            dfa = interpreter.regex_to_dfa(regex)
 
             # Используем ДКА для поиска всех вхождений
             our_matches = []
@@ -520,7 +495,8 @@ class RegexTester:
                     except:
                         break
 
-            return python_matches == our_matches, our_matches
+            # Сравниваем результаты
+            return set(python_matches) == set(our_matches), our_matches
 
         except Exception as e:
             return False, []
@@ -536,23 +512,11 @@ class RegexTester:
         dfa = interpreter.regex_to_dfa(escaped_pattern)
 
         dfa_matches = []
-        for i in range(len(text)):
-            current_state = dfa.start_state
-            j = i
-
-            while j < len(text):
-                symbol = text[j]
-                if symbol in dfa.alphabet and current_state in dfa.transitions:
-                    if symbol in dfa.transitions[current_state]:
-                        current_state = dfa.transitions[current_state][symbol]
-                        if current_state in dfa.accept_states:
-                            dfa_matches.append(i)
-                            break
-                    else:
-                        break
-                else:
-                    break
-                j += 1
+        # Ищем подстроку pattern в тексте с помощью ДКА
+        for i in range(len(text) - len(pattern) + 1):
+            substring = text[i:i + len(pattern)]
+            if dfa.process_input(substring):
+                dfa_matches.append(i)
 
         return kmp_matches, dfa_matches, kmp_matches == dfa_matches
 
@@ -750,9 +714,10 @@ def main():
         print("4. Сгенерировать тестовую строку")
         print("5. Пакетное тестирование из CSV файла")
         print("6. Примеры регулярных выражений")
-        print("7. Выход")
+        print("7. Визуализация автомата")
+        print("8. Выход")
 
-        choice = input("\nВыберите действие (1-7): ").strip()
+        choice = input("\nВыберите действие (1-8): ").strip()
 
         if choice == '1':
             print("\n" + "-" * 40)
@@ -775,7 +740,7 @@ def main():
 
                 # Шаг 3: Преобразование в ДКА
                 print("\n3. Преобразование НКА в ДКА (алгоритм подмножеств)...")
-                dfa = interpreter.nfa_to_dfa(nfa)
+                dfa = interpreter.nfa_to_dfa(nfa, regex)
                 display_dfa_info(dfa)
 
                 # Дополнительно: тестирование строки
@@ -791,13 +756,11 @@ def main():
 
                         if nfa_result != dfa_result:
                             print("  ⚠️ Внимание: результаты НКА и ДКА различаются!")
-                    except ValueError as e:
+                    except Exception as e:
                         print(f"Ошибка при тестировании: {e}")
 
             except Exception as e:
-                print(f"\n❌ Ошибка: {e}")
-                import traceback
-                traceback.print_exc()
+                print(f"\n(BAD) Ошибка: {e}")
 
         elif choice == '2':
             print("\n" + "-" * 40)
@@ -808,22 +771,23 @@ def main():
                 continue
 
             test_string = input("Введите тестовую строку: ").strip()
-            use_dfa = input("Использовать ДКА для тестирования? (y/n): ").strip().lower() == 'y'
+            use_dfa = True
 
             try:
                 success, matches = tester.test_regex(regex, test_string, use_dfa)
 
+                print(f"\nРезультаты тестирования:")
                 if success:
-                    print(f"\n✅ Результаты совпадают с Python re")
+                    print(f"(GOOD) Результаты совпадают с Python re")
                 else:
-                    print(f"\n❌ Результаты НЕ совпадают с Python re")
+                    print(f"(BAD) Результаты НЕ совпадают с Python re")
 
                 print(f"Наш интерпретатор нашел {len(matches)} совпадений")
                 if matches:
                     print(f"Позиции совпадений: {matches}")
 
             except Exception as e:
-                print(f"\n❌ Ошибка: {e}")
+                print(f"\n(BAD) Ошибка: {e}")
 
         elif choice == '3':
             print("\n" + "-" * 40)
@@ -854,11 +818,11 @@ def main():
                 print(f"  ДКА-поиск:       {len(dfa_matches)} совпадений")
 
                 if equal:
-                    print(f"  ✅ Результаты идентичны")
+                    print(f"  (GOOD) Результаты идентичны")
                     if kmp_matches:
                         print(f"  Позиции: {kmp_matches[:10]}{'...' if len(kmp_matches) > 10 else ''}")
                 else:
-                    print(f"  ❌ Результаты различаются")
+                    print(f"  (BAD) Результаты различаются")
 
                     # Показываем различия
                     only_kmp = set(kmp_matches) - set(dfa_matches)
@@ -870,7 +834,7 @@ def main():
                         print(f"  Только ДКА нашел: {sorted(only_dfa)[:5]}{'...' if len(only_dfa) > 5 else ''}")
 
             except Exception as e:
-                print(f"\n❌ Ошибка: {e}")
+                print(f"\n(BAD) Ошибка: {e}")
 
         elif choice == '4':
             print("\n" + "-" * 40)
@@ -889,7 +853,7 @@ def main():
 
             test_string = tester.generate_test_string(length, alphabet)
 
-            print(f"\n✅ Сгенерированная строка:")
+            print(f"\n(GOOD) Сгенерированная строка:")
             print(f"Длина: {len(test_string)} символов")
             print(f"Алфавит: {set(alphabet)}")
             print(f"\n{test_string}")
@@ -901,16 +865,16 @@ def main():
                 try:
                     with open(filename, 'w', encoding='utf-8') as f:
                         f.write(test_string)
-                    print(f"✅ Строка сохранена в {filename}")
+                    print(f"(GOOD) Строка сохранена в {filename}")
                 except Exception as e:
-                    print(f"❌ Ошибка сохранения: {e}")
+                    print(f"(BAD) Ошибка сохранения: {e}")
 
         elif choice == '5':
             print("\n" + "-" * 40)
             csv_file = input("Введите путь к CSV файлу с тестами: ").strip()
 
             if not os.path.exists(csv_file):
-                print(f"❌ Файл {csv_file} не найден")
+                print(f"(BAD) Файл {csv_file} не найден")
                 continue
 
             output_file = input("Введите путь для сохранения результатов (или Enter для пропуска): ").strip()
@@ -919,7 +883,7 @@ def main():
             results = batch_tester.test_from_csv(csv_file, output_file if output_file else None)
 
             if "error" in results:
-                print(f"❌ Ошибка: {results['error']}")
+                print(f"(BAD) Ошибка: {results['error']}")
             else:
                 print("\n" + "=" * 60)
                 print("ИТОГИ ПАКЕТНОГО ТЕСТИРОВАНИЯ:")
@@ -929,13 +893,13 @@ def main():
                 print(f"  Успешность: {results['success_rate']:.1f}%")
 
                 if results['success_rate'] == 100:
-                    print("  🎉 Отличный результат!")
+                    print("   Отличный результат!")
                 elif results['success_rate'] >= 80:
-                    print("  👍 Хороший результат!")
+                    print("   Хороший результат!")
                 elif results['success_rate'] >= 60:
-                    print("  ⚠️  Есть над чем поработать")
+                    print("  ️  Есть над чем поработать")
                 else:
-                    print("  ❌ Требуется серьезная доработка")
+                    print("  (BAD) Требуется серьезная доработка")
 
         elif choice == '6':
             print("\n" + "=" * 60)
@@ -952,15 +916,13 @@ def main():
                 ("a(b|c)d", "'a', затем 'b' или 'c', затем 'd'"),
                 ("(ab)+", "Один или более раз 'ab'"),
                 ("a*b*", "Ноль или более 'a', затем ноль или более 'b'"),
-                ("(a|ε)b", "'a' или пусто, затем 'b'"),
             ]
 
             for i, (regex, desc) in enumerate(examples, 1):
                 print(f"{i:2}. {regex:15} - {desc}")
 
             print("\nПример CSV файла для тестирования:")
-            print("""
-regex,test_string,expected
+            print("""regex,test_string,expected
 a,a,True
 a,b,False
 ab,ab,True
@@ -970,17 +932,71 @@ a|b,b,True
 a|b,c,False
 a*,aaa,True
 a*,b,False
-(a|b)*,abba,True
-            """)
+(a|b)*,abba,True""")
 
         elif choice == '7':
+            print("\n" + "-" * 40)
+            regex = input("Введите регулярное выражение для визуализации: ").strip()
+
+            if not regex:
+                print("Ошибка: регулярное выражение не может быть пустым")
+                continue
+
+            try:
+                print("\nПостроение автомата...")
+                dfa = interpreter.regex_to_dfa(regex)
+
+                print("\n" + "=" * 60)
+                print("ВИЗУАЛИЗАЦИЯ АВТОМАТА:")
+                print("=" * 60)
+
+                # Простая текстовая визуализация
+                print(f"\nАлфавит: {sorted(dfa.alphabet)}")
+                print(f"Начальное состояние: q{dfa.start_state}")
+                print(f"Допускающие состояния: {sorted(dfa.accept_states)}")
+
+                print("\nТаблица переходов:")
+                print("Состояние | " + " | ".join(sorted(dfa.alphabet)))
+                print("-" * (10 + 5 * len(dfa.alphabet)))
+
+                for state in sorted(dfa.states):
+                    if state == -1:
+                        continue
+                    row = [f"q{state:3}"]
+                    for symbol in sorted(dfa.alphabet):
+                        if state in dfa.transitions and symbol in dfa.transitions[state]:
+                            target = dfa.transitions[state][symbol]
+                            row.append(f"q{target:3}")
+                        else:
+                            row.append("  - ")
+                    print(" | ".join(row))
+
+                # Визуализация графа
+                print("\nГраф переходов:")
+                for state in sorted(dfa.states):
+                    if state == -1:
+                        continue
+                    if state in dfa.accept_states:
+                        print(f"[q{state}]")  # Допускающее состояние
+                    else:
+                        print(f" q{state} ")  # Обычное состояние
+
+                    if state in dfa.transitions:
+                        for symbol, target in sorted(dfa.transitions[state].items()):
+                            if target != -1:  # Пропускаем переходы в ловушку
+                                print(f"  --{symbol}--> q{target}")
+
+            except Exception as e:
+                print(f"\n Ошибка при визуализации: {e}")
+
+        elif choice == '8':
             print("\n" + "=" * 60)
             print("Спасибо за использование программы!")
             print("=" * 60)
             break
 
         else:
-            print("\n❌ Неверный выбор. Попробуйте снова.")
+            print("\n Неверный выбор. Попробуйте снова.")
 
 
 if __name__ == "__main__":
@@ -989,7 +1005,4 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("\n\nПрограмма завершена пользователем.")
     except Exception as e:
-        print(f"\n❌ Критическая ошибка: {e}")
-        import traceback
-
-        traceback.print_exc()
+        print(f"\n Критическая ошибка: {e}")
