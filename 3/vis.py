@@ -13,7 +13,7 @@ class StepByStepDFA:
             self.load_from_info(dfa_info)
 
     def load_from_csv(self, csv_file):
-        """Загрузка ДКА из CSV файла"""
+
         with open(csv_file, 'r', encoding='utf-8') as file:
             reader = csv.reader(file)
             data = list(reader)

@@ -3,9 +3,7 @@ from collections import defaultdict, deque
 
 
 class DFA:
-    """
-    Класс для представления детерминированного конечного автомата
-    """
+
 
     def __init__(self, states, alphabet, transitions, start_state, accept_states):
         """
