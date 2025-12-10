@@ -1,0 +1,3 @@
+,state,a,b,accept
+q0,q1,q0,*
+q1,q0,q1,
