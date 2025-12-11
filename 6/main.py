@@ -1,7 +1,12 @@
 import csv
 import sys
+import json
 from collections import defaultdict
 from typing import List, Dict, Tuple, Set, Optional
+import graphviz
+import matplotlib.pyplot as plt
+import networkx as nx
+from IPython.display import display, HTML
 
 
 class PushdownAutomaton:
@@ -17,6 +22,7 @@ class PushdownAutomaton:
         self.accepting_states: Set[str] = set()
         self.accept_by_final_state: bool = True
         self.accept_by_empty_stack: bool = False
+        self.transition_history: List[Dict] = []
 
     def load_from_csv(self, csv_file: str) -> None:
         """
@@ -25,6 +31,11 @@ class PushdownAutomaton:
         Формат CSV:
         current_state,input_symbol,stack_top,new_state,stack_push
         """
+        self.transitions.clear()
+        self.states.clear()
+        self.input_alphabet.clear()
+        self.stack_alphabet.clear()
+
         with open(csv_file, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
 
@@ -46,13 +57,13 @@ class PushdownAutomaton:
                     self.stack_alphabet.add(stack_top)
 
                 # Обработка символов для помещения в стек
-                for symbol in stack_push:
-                    if symbol != 'ε':
-                        self.stack_alphabet.add(symbol)
+                if stack_push != 'ε':
+                    for symbol in stack_push:
+                        if symbol != 'ε':
+                            self.stack_alphabet.add(symbol)
 
                 # Добавляем переход
-                key = (current_state, input_symbol if input_symbol else 'ε',
-                       stack_top if stack_top else 'ε')
+                key = (current_state, input_symbol, stack_top)
                 self.transitions[key].append((new_state, stack_push))
 
     def set_start_configuration(self, start_state: str, start_stack_symbol: str) -> None:
@@ -99,69 +110,106 @@ class PushdownAutomaton:
         - accept: допускается ли цепочка
         - history: история работы автомата
         """
+        self.transition_history = []
+
         # Проверяем входные символы
         for symbol in input_string:
-            if symbol not in self.input_alphabet:
+            if symbol not in self.input_alphabet and symbol != 'ε':
                 return False, [f"Ошибка: символ '{symbol}' не найден во входном алфавите"]
 
         # Инициализация
-        current_configurations = [{
+        configurations = [{
             'state': self.start_state,
             'stack': [self.start_stack_symbol],
             'position': 0,
-            'history': [f"Начало: состояние={self.start_state}, стек=['{self.start_stack_symbol}']"]
+            'history': [f"Начало: состояние={self.start_state}, стек=['{self.start_stack_symbol}']"],
+            'path': []
         }]
 
         step = 0
-        visited_configurations = set()
+        visited = set()
 
-        while current_configurations and step < max_steps:
+        while configurations and step < max_steps:
             step += 1
-            new_configurations = []
+            next_configurations = []
 
-            for config in current_configurations:
+            for config in configurations:
                 state = config['state']
                 stack = config['stack'].copy()
                 position = config['position']
                 history = config['history'].copy()
+                path = config['path'].copy()
 
                 # Проверяем, была ли уже такая конфигурация
                 config_key = (state, tuple(stack), position)
-                if config_key in visited_configurations:
+                if config_key in visited:
                     continue
-                visited_configurations.add(config_key)
+                visited.add(config_key)
 
                 # Проверка условия допуска
                 if self._check_acceptance(state, stack, position, input_string):
                     history.append("✓ Цепочка допускается")
+                    self.transition_history = path
                     return True, history
 
-                # Получаем возможные переходы
-                transitions = []
+                # Получаем текущий символ (может быть ε)
+                current_input = input_string[position] if position < len(input_string) else None
 
-                # Переходы с чтением входного символа
-                if position < len(input_string):
-                    input_symbol = input_string[position]
-                    key = (state, input_symbol, stack[-1] if stack else 'ε')
-                    for new_state, stack_push in self.transitions.get(key, []):
-                        transitions.append((new_state, stack_push, input_symbol, position + 1))
+                # Возможные переходы
+                possible_transitions = []
 
-                # Эпсилон-переходы (без чтения входного символа)
-                key_epsilon = (state, 'ε', stack[-1] if stack else 'ε')
-                for new_state, stack_push in self.transitions.get(key_epsilon, []):
-                    transitions.append((new_state, stack_push, 'ε', position))
+                # 1. Переходы по входному символу
+                if current_input is not None:
+                    # Проверяем переходы с текущим символом
+                    stack_top = stack[-1] if stack else 'ε'
+                    key = (state, current_input, stack_top)
+                    if key in self.transitions:
+                        for new_state, stack_push in self.transitions[key]:
+                            possible_transitions.append((
+                                new_state, stack_push, current_input, position + 1
+                            ))
+
+                    # Проверяем переходы с ε на стеке
+                    key_eps_stack = (state, current_input, 'ε')
+                    if key_eps_stack in self.transitions and not stack:
+                        for new_state, stack_push in self.transitions[key_eps_stack]:
+                            possible_transitions.append((
+                                new_state, stack_push, current_input, position + 1
+                            ))
+
+                # 2. ε-переходы (без чтения входного символа)
+                # С обычным символом на стеке
+                stack_top = stack[-1] if stack else 'ε'
+                key_eps_input = (state, 'ε', stack_top)
+                if key_eps_input in self.transitions:
+                    for new_state, stack_push in self.transitions[key_eps_input]:
+                        possible_transitions.append((
+                            new_state, stack_push, 'ε', position
+                        ))
+
+                # С ε на стеке
+                if not stack:
+                    key_eps_both = (state, 'ε', 'ε')
+                    if key_eps_both in self.transitions:
+                        for new_state, stack_push in self.transitions[key_eps_both]:
+                            possible_transitions.append((
+                                new_state, stack_push, 'ε', position
+                            ))
 
                 # Применяем переходы
-                for new_state, stack_push, used_symbol, new_position in transitions:
+                for new_state, stack_push, used_symbol, new_position in possible_transitions:
                     new_stack = stack.copy()
 
-                    # Удаляем верхний символ стека
-                    if stack:
+                    # Удаляем верхний символ стека (если не ε)
+                    if stack and stack_top != 'ε':
                         new_stack.pop()
+                    elif not stack and stack_top == 'ε':
+                        # Стек пустой и переход по ε
+                        pass
 
                     # Добавляем новые символы в стек
-                    for symbol in reversed(stack_push):
-                        if symbol != 'ε':
+                    if stack_push != 'ε':
+                        for symbol in reversed(stack_push):
                             new_stack.append(symbol)
 
                     # Создаем новую конфигурацию
@@ -169,16 +217,28 @@ class PushdownAutomaton:
                     history_entry = (f"Шаг {step}: состояние={state}->{new_state}, "
                                      f"символ={used_symbol_str}, стек={stack}->{new_stack}")
 
+                    transition_record = {
+                        'step': step,
+                        'from_state': state,
+                        'to_state': new_state,
+                        'input': used_symbol,
+                        'stack_top': stack_top,
+                        'stack_push': stack_push,
+                        'stack_before': stack.copy(),
+                        'stack_after': new_stack.copy()
+                    }
+
                     new_config = {
                         'state': new_state,
                         'stack': new_stack,
                         'position': new_position,
-                        'history': history + [history_entry]
+                        'history': history + [history_entry],
+                        'path': path + [transition_record]
                     }
 
-                    new_configurations.append(new_config)
+                    next_configurations.append(new_config)
 
-            current_configurations = new_configurations
+            configurations = next_configurations
 
         # Если не нашли допускающую конфигурацию
         if step >= max_steps:
@@ -203,6 +263,156 @@ class PushdownAutomaton:
             return input_consumed and len(stack) == 0
         else:
             return False
+
+    def visualize_transitions(self, output_file: str = 'pda_graph'):
+        """
+        Визуализация графа переходов автомата
+        """
+        dot = graphviz.Digraph(comment='Pushdown Automaton', format='png')
+
+        # Настройка стилей
+        dot.attr(rankdir='LR', size='10,10')
+
+        # Добавление состояний
+        for state in self.states:
+            if state == self.start_state:
+                # Начальное состояние
+                dot.node(state, state, shape='circle', style='bold', color='green')
+            elif state in self.accepting_states:
+                # Допускающее состояние
+                dot.node(state, state, shape='doublecircle', color='blue')
+            else:
+                # Обычное состояние
+                dot.node(state, state, shape='circle')
+
+        # Добавление переходов
+        for (from_state, input_symbol, stack_top), transitions in self.transitions.items():
+            for to_state, stack_push in transitions:
+                # Форматирование метки перехода
+                label = f"{input_symbol}, {stack_top} → {stack_push}"
+
+                # Разные цвета для разных типов переходов
+                edge_attrs = {}
+                if input_symbol == 'ε':
+                    edge_attrs['color'] = 'red'
+                    edge_attrs['style'] = 'dashed'
+                elif stack_push == 'ε':
+                    edge_attrs['color'] = 'orange'
+                else:
+                    edge_attrs['color'] = 'black'
+
+                dot.edge(from_state, to_state, label=label, **edge_attrs)
+
+        # Сохранение и отображение
+        dot.render(output_file, view=True, cleanup=True)
+        print(f"Граф переходов сохранен в {output_file}.png")
+
+        return dot
+
+    def visualize_path(self, input_string: str, output_file: str = 'pda_path'):
+        """
+        Визуализация пути для конкретной входной цепочки
+        """
+        # Запускаем симуляцию для получения истории
+        accept, history = self.simulate(input_string)
+
+        if not accept:
+            print(f"Цепочка '{input_string}' не допускается, невозможно визуализировать путь")
+            return
+
+        dot = graphviz.Digraph(comment='PDA Execution Path', format='png')
+        dot.attr(rankdir='LR', size='12,8')
+
+        # Создаем узлы для каждого шага
+        steps = [f"Нач: {self.start_state}, стек: [{self.start_stack_symbol}]"]
+
+        for i, transition in enumerate(self.transition_history):
+            step_desc = f"Шаг {i + 1}: {transition['from_state']}→{transition['to_state']}\n"
+            step_desc += f"Вход: {transition['input']}\n"
+            step_desc += f"Стек: {transition['stack_before']}→{transition['stack_after']}"
+            steps.append(step_desc)
+
+        # Добавляем финальный шаг
+        final_state = self.transition_history[-1]['to_state'] if self.transition_history else self.start_state
+        steps.append(f"Конец: {final_state}\nЦепочка допущена!")
+
+        # Создаем узлы
+        for i, step in enumerate(steps):
+            color = 'green' if i == 0 else 'lightblue' if i < len(steps) - 1 else 'gold'
+            dot.node(f'step{i}', step, shape='rectangle', style='filled',
+                     color=color, fontsize='10')
+
+        # Создаем ребра
+        for i in range(len(steps) - 1):
+            dot.edge(f'step{i}', f'step{i + 1}', arrowhead='normal')
+
+        # Сохранение
+        dot.render(output_file, view=True, cleanup=True)
+        print(f"Путь выполнения сохранен в {output_file}.png")
+
+        return dot
+
+    def print_detailed_info(self):
+        """Вывод подробной информации об автомате и переходах"""
+        print("=" * 80)
+        print("ПОДРОБНАЯ ИНФОРМАЦИЯ О МАГАЗИННОМ АВТОМАТЕ")
+        print("=" * 80)
+
+        print(f"Состояния ({len(self.states)}): {', '.join(sorted(self.states))}")
+        print(f"Входной алфавит ({len(self.input_alphabet)}): {', '.join(sorted(self.input_alphabet))}")
+        print(f"Стековый алфавит ({len(self.stack_alphabet)}): {', '.join(sorted(self.stack_alphabet))}")
+        print(f"Начальное состояние: {self.start_state}")
+        print(f"Начальный символ стека: {self.start_stack_symbol}")
+        print(f"Допускающие состояния: {', '.join(sorted(self.accepting_states))}")
+
+        mode = []
+        if self.accept_by_final_state:
+            mode.append("по конечному состоянию")
+        if self.accept_by_empty_stack:
+            mode.append("по пустому стеку")
+        print(f"Режим допуска: {' + '.join(mode) if mode else 'не задан'}")
+
+        print("\n" + "=" * 80)
+        print("ПЕРЕХОДЫ:")
+        print("=" * 80)
+
+        transitions_count = 0
+        for (from_state, input_symbol, stack_top), to_list in self.transitions.items():
+            for to_state, stack_push in to_list:
+                transitions_count += 1
+                print(f"δ({from_state}, {input_symbol}, {stack_top}) = ({to_state}, {stack_push})")
+
+        print(f"\nВсего переходов: {transitions_count}")
+        print("=" * 80)
+
+    def export_to_json(self, filename: str = 'pda_description.json'):
+        """Экспорт описания автомата в JSON файл"""
+        data = {
+            'states': list(self.states),
+            'input_alphabet': list(self.input_alphabet),
+            'stack_alphabet': list(self.stack_alphabet),
+            'start_state': self.start_state,
+            'start_stack_symbol': self.start_stack_symbol,
+            'accepting_states': list(self.accepting_states),
+            'accept_by_final_state': self.accept_by_final_state,
+            'accept_by_empty_stack': self.accept_by_empty_stack,
+            'transitions': []
+        }
+
+        for (from_state, input_symbol, stack_top), to_list in self.transitions.items():
+            for to_state, stack_push in to_list:
+                data['transitions'].append({
+                    'from': from_state,
+                    'input': input_symbol,
+                    'stack_top': stack_top,
+                    'to': to_state,
+                    'stack_push': stack_push
+                })
+
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+
+        print(f"Описание автомата экспортировано в {filename}")
 
     def print_info(self) -> None:
         """Вывод информации об автомате"""
@@ -320,10 +530,21 @@ def interactive_mode():
         return
 
     # Вывод информации об автомате
-    pda.print_info()
+    pda.print_detailed_info()
+
+    # Визуализация графа переходов
+    viz = input("\nВизуализировать граф переходов? (y/n): ").strip().lower()
+    if viz == 'y':
+        pda.visualize_transitions()
+
+    # Экспорт в JSON
+    export = input("\nЭкспортировать описание автомата в JSON? (y/n): ").strip().lower()
+    if export == 'y':
+        pda.export_to_json()
 
     # Обработка цепочек
-    print("\nВВОД ЦЕПОЧЕК (для выхода введите 'exit' или 'quit')")
+    print("\n" + "=" * 60)
+    print("ВВОД ЦЕПОЧЕК (для выхода введите 'exit' или 'quit')")
     print("=" * 60)
 
     while True:
@@ -342,11 +563,20 @@ def interactive_mode():
         print(f"\nРезультат: {'✓ ДОПУСКАЕТСЯ' if accept else '✗ НЕ ДОПУСКАЕТСЯ'}")
 
         # Вывод подробной информации по запросу
-        details = input("Показать подробную информацию? (y/n): ").strip().lower()
+        details = input("Показать подробную информацию о выполнении? (y/n): ").strip().lower()
         if details == 'y':
             print("\nИстория работы:")
-            for entry in history[-10:]:  # Показываем последние 10 шагов
+            for i, entry in enumerate(history):
                 print(f"  {entry}")
+                if i >= 20:  # Ограничиваем вывод
+                    print(f"  ... и еще {len(history) - i} шагов")
+                    break
+
+        # Визуализация пути
+        if accept:
+            viz_path = input("Визуализировать путь выполнения? (y/n): ").strip().lower()
+            if viz_path == 'y':
+                pda.visualize_path(chain)
 
 
 def batch_mode(config_file: str, chains_file: str):
@@ -367,7 +597,12 @@ def batch_mode(config_file: str, chains_file: str):
             print(f"  - {error}")
         return
 
-    pda.print_info()
+    pda.print_detailed_info()
+
+    # Визуализация графа
+    viz = input("\nВизуализировать граф переходов? (y/n): ").strip().lower()
+    if viz == 'y':
+        pda.visualize_transitions()
 
     # Чтение цепочек из файла
     print(f"\nЧтение цепочек из файла: {chains_file}")
@@ -394,9 +629,20 @@ def batch_mode(config_file: str, chains_file: str):
     with open(output_file, 'w', encoding='utf-8') as f:
         f.write("Результаты проверки цепочек\n")
         f.write("=" * 60 + "\n")
+        f.write(f"Автомат из: {config_file}\n")
+        f.write(f"Цепочки из: {chains_file}\n")
+        f.write("=" * 60 + "\n\n")
+
         for chain, accept in results:
             status = "ДОПУСКАЕТСЯ" if accept else "НЕ ДОПУСКАЕТСЯ"
             f.write(f"{chain:20} -> {status}\n")
+
+        # Статистика
+        accepted = sum(1 for _, accept in results if accept)
+        f.write(f"\nСтатистика:\n")
+        f.write(f"Всего цепочек: {len(results)}\n")
+        f.write(f"Допущено: {accepted}\n")
+        f.write(f"Отвергнуто: {len(results) - accepted}\n")
 
     print(f"\nРезультаты сохранены в файл: {output_file}")
 
@@ -409,8 +655,9 @@ def main():
     print("1. Интерактивный режим")
     print("2. Пакетный режим (с конфигурационным файлом)")
     print("3. Пример использования")
+    print("4. Запуск тестов")
 
-    choice = input("\nВыберите режим (1-3): ").strip()
+    choice = input("\nВыберите режим (1-4): ").strip()
 
     if choice == '1':
         interactive_mode()
@@ -420,6 +667,8 @@ def main():
         batch_mode(config_file, chains_file)
     elif choice == '3':
         run_example()
+    elif choice == '4':
+        run_tests()
     else:
         print("Неверный выбор. Запуск интерактивного режима...")
         interactive_mode()
@@ -427,9 +676,9 @@ def main():
 
 def run_example():
     """Запуск примера работы программы"""
-    print("\n" + "=" * 60)
+    print("\n" + "=" * 80)
     print("ПРИМЕР: Магазинный автомат для языка {a^n b^n | n >= 0}")
-    print("=" * 60)
+    print("=" * 80)
 
     # Создание примера CSV файла
     example_csv = """current_state,input_symbol,stack_top,new_state,stack_push
@@ -471,13 +720,17 @@ aaaabb
     print("Создан пример файла с цепочками: example_chains.txt")
 
     # Запуск пакетного режима
-    print("\n" + "=" * 60)
+    print("\n" + "=" * 80)
     print("ЗАПУСК ПРОВЕРКИ ПРИМЕРА")
-    print("=" * 60)
+    print("=" * 80)
 
     try:
         pda = load_pda_from_config('example_config.txt')
-        pda.print_info()
+        pda.print_detailed_info()
+
+        # Визуализация графа
+        print("\nВизуализация графа переходов...")
+        pda.visualize_transitions('example_pda_graph')
 
         with open('example_chains.txt', 'r', encoding='utf-8') as f:
             chains = [line.strip() for line in f if line.strip()]
@@ -489,8 +742,35 @@ aaaabb
             chain_display = chain if chain else "ε (пустая)"
             print(f"  {chain_display:20} -> {status}")
 
+            # Визуализация пути для допускаемых цепочек
+            if accept and chain:
+                pda.visualize_path(chain, f'example_path_{chain}')
+
+        # Экспорт в JSON
+        pda.export_to_json('example_pda.json')
+        print(f"\nОписание автомата экспортировано в example_pda.json")
+
     except Exception as e:
         print(f"Ошибка: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+def run_tests():
+    """Запуск тестов"""
+    import subprocess
+    import sys
+
+    print("\n" + "=" * 80)
+    print("ЗАПУСК ТЕСТОВ")
+    print("=" * 80)
+
+    result = subprocess.run([sys.executable, '-m', 'pytest', 'test.py', '-v'])
+
+    if result.returncode == 0:
+        print("\n Все тесты пройдены успешно!")
+    else:
+        print("\n Некоторые тесты не пройдены.")
 
 
 if __name__ == "__main__":

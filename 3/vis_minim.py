@@ -622,7 +622,7 @@ def minimize_dfa_hopcroft(dfa):
 
 
 if __name__ == "__main__":
-    # Проверка наличия graphviz
+
     try:
         import graphviz
 

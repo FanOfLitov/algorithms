@@ -1,7 +1,7 @@
 import unittest
 import tempfile
 import os
-from pda import PushdownAutomaton, load_pda_from_config
+from main import PushdownAutomaton, load_pda_from_config
 
 
 class TestPushdownAutomaton(unittest.TestCase):

@@ -3,7 +3,7 @@ import os
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QFileDialog, QHBoxLayout, QVBoxLayout, QPushButton,
     QLabel, QTreeView, QMessageBox, QFileSystemModel, QStandardItemModel,
-    QStandardItem
+     QStandardItem
 )
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtCore import Qt
