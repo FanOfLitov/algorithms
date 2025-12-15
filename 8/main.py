@@ -3,9 +3,9 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-# -----------------------------
+
 #   Структура узла дерева
-# -----------------------------
+
 @dataclass
 class Node:
     value: str
@@ -14,9 +14,7 @@ class Node:
     def add(self, child: "Node"):
         self.children.append(child)
 
-# -----------------------------
 #   КС-грамматика
-# -----------------------------
 grammar = {
     "E": [["E", "+", "T"], ["T"]],
     "T": [["T", "*", "F"], ["F"]],
@@ -24,9 +22,9 @@ grammar = {
 }
 
 
-# -----------------------------
+
 #   Рекурсивный нисходящий разбор
-# -----------------------------
+
 class Parser:
     def __init__(self, tokens: List[str]):
         self.tokens = deque(tokens)
@@ -99,9 +97,9 @@ class Parser:
         return None
 
 
-# -----------------------------
+
 # ASCII-визуализация дерева
-# -----------------------------
+
 def print_tree(node: Node, indent: str = "", last=True):
     connector = "└─ " if last else "├─ "
     print(indent + connector + node.value)
@@ -110,9 +108,9 @@ def print_tree(node: Node, indent: str = "", last=True):
         print_tree(child, indent, i == len(node.children) - 1)
 
 
-# -----------------------------
+
 # Сохранение в CSV (parent, child)
-# -----------------------------
+
 def save_tree_csv(node: Node, filename="tree.csv"):
     rows = []
 
@@ -131,9 +129,9 @@ def save_tree_csv(node: Node, filename="tree.csv"):
     print(f"CSV сохранён как {filename}")
 
 
-# -----------------------------
-# Graphviz визуализация (опционально)
-# -----------------------------
+
+#  визуализация
+
 def export_graphviz(node: Node, filename="tree.gv"):
     from graphviz import Digraph
     dot = Digraph()
@@ -149,9 +147,9 @@ def export_graphviz(node: Node, filename="tree.gv"):
     print(f"Визуализация сохранена как {filename}.png")
 
 
-# -----------------------------
+
 # Тесты
-# -----------------------------
+
 def run_tests():
     examples = [
         ["id"],
@@ -171,9 +169,9 @@ def run_tests():
             print("Ошибка разбора!")
 
 
-# -----------------------------
+
 # Пример запуска
-# -----------------------------
+
 if __name__ == "__main__":
     tokens = ["id", "+", "id", "*", "id"]
     parser = Parser(tokens)

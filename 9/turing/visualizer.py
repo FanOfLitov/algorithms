@@ -1,5 +1,5 @@
 from graphviz import Digraph
-from .loader import load_transitions
+from loader import load_transitions
 
 
 def visualize(csv_file: str, out_file="graph"):

@@ -1,5 +1,5 @@
-from .loader import load_transitions
-from .machine import TuringMachine
+from loader import load_transitions
+from machine import TuringMachine
 
 
 def main():

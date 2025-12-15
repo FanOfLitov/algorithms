@@ -1,0 +1,8 @@
+state,input,stack_top,next_state,push
+q0,ε,Z,q1,ZS
+q1,a,a,q1,ε
+q1,b,b,q1,ε
+q1,ε,S,q1,BA
+q1,ε,A,q1,a
+q1,ε,B,q1,b
+q1,ε,Z,q2,ε
