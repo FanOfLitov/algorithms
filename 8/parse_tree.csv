@@ -1,0 +1,13 @@
+parent,child
+E,E
+E,T
+T,F
+F,id
+E,+
+E,T
+T,T
+T,F
+F,id
+T,*
+T,F
+F,id

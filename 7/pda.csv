@@ -1,0 +1,6 @@
+state,input,stack_top,next_state,push
+q,,,q,S
+q,,S,q,AB
+q,a,A,q,
+q,b,B,q,
+q,,,accept,
