@@ -1,0 +1,5 @@
+csv_file=example_pda.csv
+start_state=q0
+start_stack_symbol=Z
+accepting_states=q2
+acceptance_mode=final_state

@@ -1,0 +1,6 @@
+current_state,input_symbol,stack_top,new_state,stack_push
+q0,a,Z,q0,AZ
+q0,a,A,q0,AA
+q0,b,A,q1,ε
+q1,b,A,q1,ε
+q1,ε,Z,q2,Z

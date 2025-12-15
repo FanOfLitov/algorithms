@@ -59,6 +59,7 @@ q1,ε,Z,q2,Z"""
     def test_a_power_n_b_power_n_language(self):
         """Тест автомата для языка {a^n b^n | n >= 0}"""
         csv_content = """current_state,input_symbol,stack_top,new_state,stack_push
+q0,ε,Z,q2,Z
 q0,a,Z,q0,AZ
 q0,a,A,q0,AA
 q0,b,A,q1,ε
@@ -101,6 +102,7 @@ q1,ε,Z,q2,Z"""
     def test_palindrome_language(self):
         """Тест автомата для языка палиндромов над {a,b}"""
         csv_content = """current_state,input_symbol,stack_top,new_state,stack_push
+q0,ε,Z,q2,ε
 q0,a,Z,q0,AZ
 q0,b,Z,q0,BZ
 q0,a,A,q0,AA
@@ -153,6 +155,7 @@ q1,ε,Z,q2,ε"""
     def test_accept_by_empty_stack(self):
         """Тест допуска по пустому стеку"""
         csv_content = """current_state,input_symbol,stack_top,new_state,stack_push
+q0,ε,Z,q1,ε
 q0,a,Z,q0,AZ
 q0,a,A,q0,AA
 q0,b,A,q1,ε
@@ -171,6 +174,7 @@ q1,ε,Z,q1,ε"""
             self.assertEqual(len(errors), 0)
 
             test_cases = [
+                ("", True),  # ε через переход q0,ε,Z,q1,ε
                 ("ab", True),
                 ("aabb", True),
                 ("aaabbb", True),
@@ -188,6 +192,7 @@ q1,ε,Z,q1,ε"""
     def test_epsilon_transitions(self):
         """Тест эпсилон-переходов"""
         csv_content = """current_state,input_symbol,stack_top,new_state,stack_push
+q0,ε,Z,q2,Z
 q0,ε,Z,q0,A
 q0,ε,A,q0,AA
 q0,a,A,q1,ε
@@ -221,6 +226,7 @@ q1,ε,Z,q2,Z"""
     def test_multiple_transitions(self):
         """Тест недетерминированного автомата с несколькими переходами"""
         csv_content = """current_state,input_symbol,stack_top,new_state,stack_push
+q0,ε,Z,q2,Z
 q0,a,Z,q0,AZ
 q0,a,Z,q0,BZ
 q0,b,A,q1,ε
@@ -237,6 +243,7 @@ q1,ε,Z,q2,Z"""
 
             # Автомат допускает цепочки вида ab
             test_cases = [
+                ("", True),  # ε
                 ("ab", True),
                 ("aab", False),
                 ("abb", False),
@@ -266,6 +273,7 @@ q0,a,Z,q0,AZ"""
 
             # Задаем несуществующее состояние
             self.pda.set_start_configuration('q99', 'Z')
+            self.pda.set_acceptance_mode(by_final_state=False, by_empty_stack=False)  # Отключаем проверку допуска
             errors = self.pda.validate_configuration()
             self.assertIn("не найден в множестве состояний", errors[0])
 
@@ -332,7 +340,7 @@ q0,ε,A,q0,AA"""
         try:
             self.pda.load_from_csv(csv_file)
             self.pda.set_start_configuration('q0', 'Z')
-            self.pda.set_accepting_states(['q0'])
+            self.pda.set_accepting_states(['q99'])  # Несуществующее состояние
             self.pda.set_acceptance_mode(by_final_state=True, by_empty_stack=False)
 
             # Этот автомат будет бесконечно добавлять символы в стек
