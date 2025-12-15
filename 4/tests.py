@@ -178,7 +178,7 @@ a*,aaaa,True
             temp_file = f.name
 
         try:
-            # Используем CSVHandler из main.py
+            # Используем CSVHandler из pda.py
             test_cases = CSVHandler.read_test_cases(temp_file)
 
             self.assertEqual(len(test_cases), 5)

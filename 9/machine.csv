@@ -1,0 +1,4 @@
+state,read,write,move,next_state
+q0,0,1,R,q1
+q1,1,0,L,q0
+q1,_,_,S,halt
