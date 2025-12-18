@@ -2,9 +2,9 @@ import sys
 import os
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QFileDialog, QHBoxLayout, QVBoxLayout, QPushButton,
-    QLabel, QTreeView, QMessageBox, QFileSystemModel, QStandardItemModel,
-     QStandardItem
+    QLabel, QTreeView, QMessageBox, QFileSystemModel
 )
+from PyQt5.QtGui import QStandardItemModel, QStandardItem
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtCore import Qt
 
