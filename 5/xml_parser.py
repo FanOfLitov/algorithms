@@ -1,140 +1,137 @@
-from xml_lexer import XMLToken, XMLLexerError, XMLLexer
+# -*- coding: utf-8 -*-
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
+
+from xml_lexer import XMLLexer, XMLLexerError, XMLToken
 
 
 class XMLParserError(Exception):
     pass
 
 
+@dataclass
 class XMLNode:
-    def __init__(self, kind, name=None, text=None, attrs=None, children=None):
-        self.kind = kind            # element, text, comment, cdata
-        self.name = name            # tag name
-        self.text = text            # for text/comment/cdata
-        self.attrs = attrs or {}    # dict
-        self.children = children or []
-
-    def __repr__(self):
-        if self.kind == "element":
-            return f"<Element {self.name} attrs={self.attrs} children={len(self.children)}>"
-        elif self.kind == "text":
-            return f"<Text {self.text!r}>"
-        elif self.kind == "comment":
-            return f"<Comment {self.text!r}>"
-        elif self.kind == "cdata":
-            return f"<CData {self.text!r}>"
+    kind: str                      # element | text | comment | cdata | pi | prolog | doctype
+    name: Optional[str] = None     # for element
+    text: Optional[str] = None     # for text/comment/cdata/etc
+    attrs: Dict[str, str] = field(default_factory=dict)
+    children: List["XMLNode"] = field(default_factory=list)
 
 
-class XMLParser:
-    def __init__(self, tokens):
+class _Parser:
+    def __init__(self, tokens: List[XMLToken]):
         self.tokens = tokens
-        self.i = 0
+        self.k = 0
 
-    def peek(self):
-        if self.i < len(self.tokens):
-            return self.tokens[self.i]
-        return None
+    def _cur(self) -> XMLToken:
+        if self.k >= len(self.tokens):
+            return XMLToken("EOF", None, self.tokens[-1].pos if self.tokens else 0)
+        return self.tokens[self.k]
 
-    def advance(self):
-        tok = self.peek()
-        self.i += 1
+    def _eat(self, t: str) -> XMLToken:
+        tok = self._cur()
+        if tok.type != t:
+            raise XMLParserError(f"[token {self.k}] Expected {t}, got {tok.type} at pos {tok.pos}")
+        self.k += 1
         return tok
 
-    def error(self, msg):
-        raise XMLParserError(f"[token {self.i}] {msg}")
-
-    # ----------------------------------------------------------------------
-
-    def parse(self):
-        """Document → Prolog? Element"""
-        if self.peek() and self.peek().type == "PROLOG":
-            self.advance()  # skip
-
-        elem = self.parse_element()
-
-        if self.peek() is not None:
-            self.error("Extra content after root element")
-
-        return elem
-
-    # ----------------------------------------------------------------------
-
-    def parse_element(self):
-        tok = self.peek()
-        if tok is None:
-            self.error("Unexpected end of tokens")
-
-        # <tag ...>
-        if tok.type == "STARTTAG":
-            _, (name, attrs) = tok.type, tok.value
-            self.advance()
-
-            children = self.parse_content()
-
-            # expecting </tag>
-            endtag = self.advance()
-            if endtag.type != "ENDTAG":
-                self.error("Expected closing tag")
-            if endtag.value != name:
-                self.error(f"Mismatched closing tag: </{endtag.value}> for <{name}>")
-
-            return XMLNode("element", name=name, attrs=attrs, children=children)
-
-        # <tag .../>
-        elif tok.type == "SELFCLOSE":
-            _, (name, attrs) = tok.type, tok.value
-            self.advance()
-            return XMLNode("element", name=name, attrs=attrs, children=[])
-
-        self.error("Expected element start")
-
-    # ----------------------------------------------------------------------
-
-    def parse_content(self):
-        """content → (TEXT | COMMENT | CDATA | element)*"""
-
-        children = []
+    def _skip_misc(self) -> None:
+        # пропускаем служебное и пробельный текст на верхнем уровне
         while True:
-            tok = self.peek()
-            if tok is None:
-                self.error("Unexpected end, missing closing tag")
+            tok = self._cur()
+            if tok.type in ("PROLOG", "DOCTYPE", "PI", "COMMENT", "DECL"):
+                self.k += 1
+                continue
+            if tok.type == "TEXT" and str(tok.value or "").strip() == "":
+                self.k += 1
+                continue
+            break
+
+    def parse_document(self) -> XMLNode:
+        self._skip_misc()
+        if self._cur().type != "START_TAG":
+            tok = self._cur()
+            raise XMLParserError(f"[token {self.k}] Expected element start, got {tok.type} at pos {tok.pos}")
+
+        root = self.parse_element()
+
+        self._skip_misc()
+        if self._cur().type != "EOF":
+            tok = self._cur()
+            raise XMLParserError(f"[token {self.k}] Unexpected token {tok.type} at pos {tok.pos}")
+
+        return root
+
+    def parse_element(self) -> XMLNode:
+        start = self._eat("START_TAG")
+        info: Any = start.value or {}
+        name = info.get("name")
+        attrs = dict(info.get("attrs") or {})
+        self_closing = bool(info.get("self_closing"))
+
+        node = XMLNode("element", name=name, attrs=attrs)
+
+        if self_closing:
+            return node
+
+        while True:
+            tok = self._cur()
 
             if tok.type == "TEXT":
-                children.append(XMLNode("text", text=tok.value))
-                self.advance()
+                self.k += 1
+                txt = str(tok.value or "")
+                if txt.strip() != "":
+                    node.children.append(XMLNode("text", text=txt))
+                continue
 
-            elif tok.type == "COMMENT":
-                children.append(XMLNode("comment", text=tok.value))
-                self.advance()
+            if tok.type == "COMMENT":
+                self.k += 1
+                node.children.append(XMLNode("comment", text=str(tok.value or "")))
+                continue
 
-            elif tok.type == "CDATA":
-                children.append(XMLNode("cdata", text=tok.value))
-                self.advance()
+            if tok.type == "CDATA":
+                self.k += 1
+                node.children.append(XMLNode("cdata", text=str(tok.value or "")))
+                continue
 
-            elif tok.type in ("STARTTAG", "SELFCLOSE"):
-                children.append(self.parse_element())
+            if tok.type == "PI":
+                self.k += 1
+                node.children.append(XMLNode("pi", text=str(tok.value or "")))
+                continue
 
-            else:
-                break
+            if tok.type == "DECL":
+                self.k += 1
+                continue
 
-        return children
+            if tok.type == "START_TAG":
+                node.children.append(self.parse_element())
+                continue
+
+            if tok.type == "END_TAG":
+                end = self._eat("END_TAG")
+                if end.value != name:
+                    raise XMLParserError(
+                        f"[token {self.k-1}] Mismatched end tag </{end.value}> for <{name}> (pos {end.pos})"
+                    )
+                return node
+
+            if tok.type == "EOF":
+                raise XMLParserError(f"[token {self.k}] Unexpected EOF, expected </{name}>")
+
+            raise XMLParserError(f"[token {self.k}] Unexpected token {tok.type} at pos {tok.pos}")
 
 
-# ----------------------------------------------------------------------
-# Convenience API
-# ----------------------------------------------------------------------
-
-def parse_xml_string(text):
-    lexer = XMLLexer(text)
+def parse_xml_string(text: str) -> XMLNode:
     try:
-        tokens = lexer.tokenize()
+        tokens = XMLLexer(text).tokenize()
     except XMLLexerError as e:
-        raise XMLParserError(f"Lexer error: {e}")
+        raise XMLParserError(f"Lexer error: {e}") from e
 
-    parser = XMLParser(tokens)
-    return parser.parse()
+    return _Parser(tokens).parse_document()
 
 
-def parse_xml_file(path):
+def parse_xml_file(path: str) -> XMLNode:
     with open(path, "r", encoding="utf-8") as f:
-        text = f.read()
-    return parse_xml_string(text)
+        return parse_xml_string(f.read())
