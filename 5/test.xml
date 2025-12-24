@@ -10,7 +10,6 @@
     <!ATTLIST book category CDATA #REQUIRED>
     <!ATTLIST title lang CDATA #IMPLIED>
 ]>
-<!-- Каталог книг -->
 <bookstore>
     <book category="cooking">
         <title lang="en">Everyday Italian</title>
@@ -25,7 +24,6 @@
         <author>J.K. Rowling</author>
         <year>2005</year>
         <price>29.99</price>
-        <!-- Бестселлер -->
     </book>
 
     <book category="web" cover="paperback">

@@ -170,7 +170,7 @@ def run_tests():
 
 
 
-# Пример запуска
+
 
 if __name__ == "__main__":
     tokens = ["id", "+", "id", "*", "id"]
@@ -184,7 +184,7 @@ if __name__ == "__main__":
         save_tree_csv(tree, "parse_tree.csv")
         export_graphviz(tree, "parse_tree")
 
-        print("\n--- Запуск тестов ---")
+        print("\n Тесты щаз будут")
         run_tests()
     else:
         print("Ошибка разбора!")

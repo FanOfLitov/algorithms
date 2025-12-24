@@ -97,9 +97,9 @@ class MainWindow(QWidget):
 
         self.setLayout(main)
 
-    # ---------------------------------------------------------------
+
     # LOAD XML
-    # ---------------------------------------------------------------
+
     def load_xml(self):
         path, _ = QFileDialog.getOpenFileName(self, "Open XML", "", "XML files (*.xml)")
         if not path:
@@ -107,9 +107,9 @@ class MainWindow(QWidget):
         self.xml_path = path
         QMessageBox.information(self, "Loaded", f"Loaded file:\n{path}")
 
-    # ---------------------------------------------------------------
+
     # PARSE XML
-    # ---------------------------------------------------------------
+
     def parse_xml(self):
         if not self.xml_path:
             QMessageBox.warning(self, "Error", "Please load an XML file first.")
@@ -125,9 +125,9 @@ class MainWindow(QWidget):
         self.tree.setModel(model)
         QMessageBox.information(self, "Success", "XML parsed successfully.")
 
-    # ---------------------------------------------------------------
+
     # SHOW AST GRAPH
-    # ---------------------------------------------------------------
+
     def show_graph(self):
         if not self.dom_root:
             QMessageBox.warning(self, "Error", "Parse XML first.")
@@ -142,9 +142,9 @@ class MainWindow(QWidget):
         )
         self.label_graph.setPixmap(pixmap)
 
-    # ---------------------------------------------------------------
+
     # GENERATE GRAPHVIZ AST
-    # ---------------------------------------------------------------
+
     def generate_graph(self, root_node):
         dot = graphviz.Digraph("XML_AST")
         dot.attr(rankdir="TB", fontsize="12")
@@ -184,7 +184,6 @@ class MainWindow(QWidget):
         return out
 
 
-# ------------------------------------------------------------------
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
